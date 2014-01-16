@@ -91,10 +91,18 @@ architecture RTL of trigger is
 	constant BASE_TRIG_HitPattern_LeadingToTrigger_6 : sub_Address := x"b6"; -- r
 	constant BASE_TRIG_HitPattern_LeadingToTrigger_7 : sub_Address := x"b7"; -- r
 	
+	
+	--debug
+	constant BASE_TRIG_Debug_ActualState : sub_Address							:= x"e0"; --r
+	constant BASE_TRIG_SelectedDebugInput_1 : sub_Address						:= x"e1"; --r/w
+	constant BASE_TRIG_SelectedDebugInput_2 : sub_Address						:= x"e2"; --r/w
+	constant BASE_TRIG_SelectedDebugInput_3 : sub_Address						:= x"e3"; --r/w
+	constant BASE_TRIG_SelectedDebugInput_4 : sub_Address						:= x"e4"; --r/w
+
 	---
 	
 	constant BASE_TRIG_FIXED : sub_Address 								:= x"f0" ; -- r
-	constant TRIG_FIXED : std_logic_vector(31 downto 0) 				:= x"1302156d"; 
+	constant TRIG_FIXED : std_logic_vector(31 downto 0) 				:= x"0800006e"; 
 	
 	--------------------------------------------
 	-- external signals in
@@ -262,7 +270,41 @@ architecture RTL of trigger is
 	signal CellsReadyStep2_Part2 : std_logic;
 	
 	
+	----------------------------------------------------------------------------------
+
+	constant NDebugSignalOutputs : integer := 4;
+	signal DebugSignals : std_logic_vector(255 downto 0);
+	signal SelectedDebugInput : std_logic_vector(8*NDebugSignalOutputs-1 downto 0);
+	signal Debug_ActualState : std_logic_vector(NDebugSignalOutputs-1 downto 0);
+
+	COMPONENT DebugChSelector
+	PORT(
+		DebugSignalsIn : IN std_logic_vector(255 downto 0);
+		SelectedInput : IN std_logic_vector(7 downto 0);          
+		SelectedOutput : OUT std_logic
+		);
+	END COMPONENT;
+
+	------------------------------------------------------------------------------
+	
+
 begin
+
+	-------------------------------------------------------------------------------------------------
+	-- Debug Selector
+	DebugSignals(32*7-1 downto 0) <= trig_in(32*7-1 downto 0);
+	DebugSignals(255) <= nim_in;
+	DebugChSelectors: for i in 0 to NDebugSignalOutputs-1 generate
+   begin
+		Inst_DebugChSelector: DebugChSelector PORT MAP(
+			DebugSignalsIn => DebugSignals,
+			SelectedInput => SelectedDebugInput((i+1)*8-1 downto i*8),  ---needs VME write
+			SelectedOutput => Debug_ActualState(i)
+		);
+	end generate;
+	-------------------------------------------------------------------------------------------------
+
+
 	------------------------------------------------------------------------------------------------
 --	ResetFSM <= ResetFSM_Via_VME or nim_in;
 	ResetFSM <= ResetFSM_Via_VME;
@@ -573,6 +615,8 @@ begin
 	trig_out(12+2 downto 12) <= ClusterCoutingResult_Saved(2 downto 0);
 	trig_out(15+9 downto 15) <= MultiplicityTriggerOutG;
 	
+	trig_out(30 downto 27) <= Debug_ActualState;
+	
 	trig_out(31) <= CB_AllOR;
 	
 	
@@ -609,6 +653,15 @@ begin
 					when BASE_TRIG_HitPattern_Simulation6 => 
 						HitPatternRegister_Simulation(32*5+19 downto 32*5+0) <= u_dat_in(19 downto 0);
 						
+					--debug
+					when BASE_TRIG_SelectedDebugInput_1 => 
+						SelectedDebugInput(8*1-1 downto 8*0) <= u_dat_in(7 downto 0); 
+					when BASE_TRIG_SelectedDebugInput_2 => 
+						SelectedDebugInput(8*2-1 downto 8*1) <= u_dat_in(7 downto 0); 
+					when BASE_TRIG_SelectedDebugInput_3 => 
+						SelectedDebugInput(8*3-1 downto 8*2) <= u_dat_in(7 downto 0); 
+					when BASE_TRIG_SelectedDebugInput_4 => 
+						SelectedDebugInput(8*4-1 downto 8*3) <= u_dat_in(7 downto 0); 
 
 					when others =>
 						null;
@@ -685,6 +738,20 @@ begin
 					when BASE_TRIG_MultiplicityUsedTurnsForTrigger =>
 						u_data_o(10 downto 0) <= MultiplicityUsedTurnsForTrigger;
 						
+						
+					--
+					--debug
+					when BASE_TRIG_SelectedDebugInput_1 => 
+						u_data_o(7 downto 0) <= SelectedDebugInput(8*1-1 downto 8*0);
+					when BASE_TRIG_SelectedDebugInput_2 => 
+						u_data_o(7 downto 0) <= SelectedDebugInput(8*2-1 downto 8*1); 
+					when BASE_TRIG_SelectedDebugInput_3 => 
+						u_data_o(7 downto 0) <= SelectedDebugInput(8*3-1 downto 8*2); 
+					when BASE_TRIG_SelectedDebugInput_4 => 
+						u_data_o(7 downto 0) <= SelectedDebugInput(8*4-1 downto 8*3);
+					when BASE_TRIG_Debug_ActualState => 
+						u_data_o(NDebugSignalOutputs-1 downto 0) <= Debug_ActualState; 
+
 						
 					when others =>
 						u_data_o(31 downto 0) <= (others => '0');
